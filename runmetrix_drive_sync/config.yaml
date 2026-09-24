@@ -1,0 +1,20 @@
+name: "Runmetrix Drive Sync"
+version: "0.1.1"
+slug: "runmetrix_drive_sync"
+description: "Copy saved Runmetrix activities from Home Assistant to Google Drive"
+arch:
+  - aarch64
+init: true
+startup: application
+boot: auto
+legacy: true
+stage: experimental
+map:
+  - type: addon_config
+    read_only: false
+  - type: share
+    read_only: true
+options:
+  interval_hours: 6
+schema:
+  interval_hours: int

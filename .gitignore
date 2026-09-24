@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+.venv/
+.env
+*.log
+*.zip
+*.csv
+*.fit
+*.FIT
+auth_state.json
+rclone.conf
+*credentials*.json
+*secret*.json
+manifest.json
+runmetrix/
+chrome-profile/

@@ -1,0 +1,11 @@
+type: button
+name: 今すぐ同期（Google Drive）
+icon: mdi:cloud-sync
+show_state: false
+tap_action:
+  action: perform-action
+  perform_action: hassio.app_restart
+  data:
+    app: local_runmetrix_drive_sync
+hold_action:
+  action: none

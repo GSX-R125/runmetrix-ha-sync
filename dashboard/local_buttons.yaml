@@ -1,0 +1,26 @@
+type: grid
+columns: 2
+square: false
+cards:
+  - type: button
+    name: Runmetrixデータを取得
+    icon: mdi:download
+    show_state: false
+    tap_action:
+      action: perform-action
+      perform_action: hassio.app_restart
+      data:
+        app: local_runmetrix_sync
+    hold_action:
+      action: none
+  - type: button
+    name: Googleドライブへ保存
+    icon: mdi:cloud-upload
+    show_state: false
+    tap_action:
+      action: perform-action
+      perform_action: hassio.app_restart
+      data:
+        app: local_runmetrix_drive_sync
+    hold_action:
+      action: none
