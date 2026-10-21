@@ -2,6 +2,7 @@ import importlib.util
 import tempfile
 import unittest
 import zipfile
+import hashlib
 from pathlib import Path
 
 
@@ -46,8 +47,59 @@ class ExportTests(unittest.TestCase):
                 z.writestr("lap_form_score-202609221859.csv", "lap,score\n1,70\n")
             dest = root / "20260922_1859"
             result = runner.extract_csv(zpath, dest)
-            self.assertEqual(set(result), runner.REQUIRED)
-            self.assertEqual({p.name for p in dest.iterdir()}, runner.REQUIRED)
+            names = {"lap_form_data-202609221859.csv", "lap_form_score-202609221859.csv"}
+            self.assertEqual(set(result), names)
+            self.assertEqual({p.name for p in dest.iterdir()}, names)
+            before = zpath.read_bytes()
+            zpath.replace(dest / zpath.name)
+            self.assertEqual(len(list(dest.iterdir())), 3)
+            self.assertEqual((dest / zpath.name).read_bytes(), before)
+            for name in names:
+                self.assertEqual(result[name], hashlib.sha256((dest / name).read_bytes()).hexdigest())
+
+    def test_wrong_activity_timestamp_rejected_before_write(self):
+        self.reject_export([
+            ('lap_form_data-202610122029.csv', 'lap,value\n1,2\n'),
+            ('lap_form_score-202610122029.csv', 'lap,score\n1,70\n')])
+
+    def test_duplicate_csv_kind_rejected_before_write(self):
+        self.reject_export([
+            ('lap_form_data.csv', 'lap,value\n1,2\n'),
+            ('lap_form_data-202609221859.csv', 'lap,value\n1,2\n'),
+            ('lap_form_score.csv', 'lap,score\n1,70\n')])
+
+    def test_invalid_content_rejected_before_write(self):
+        self.reject_export([
+            ('lap_form_data-202609221859.csv', 'lap,value\n1,2\n'),
+            ('lap_form_score-202609221859.csv', '<html>error</html>')])
+
+    def reject_export(self, members):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            zpath = root / 'export.zip'
+            with zipfile.ZipFile(zpath, 'w') as z:
+                for name, data in members:
+                    z.writestr(name, data)
+            dest = root / '20260922_1859'
+            with self.assertRaises(runner.SyncError):
+                runner.extract_csv(zpath, dest)
+            self.assertFalse(dest.exists())
+
+    def test_existing_legacy_csv_not_duplicated_or_deleted(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            zpath = root / 'export.zip'
+            dest = root / '20260922_1859'
+            dest.mkdir()
+            legacy = dest / 'lap_form_data.csv'
+            legacy.write_text('keep')
+            with zipfile.ZipFile(zpath, 'w') as z:
+                for kind in ('data', 'score'):
+                    z.writestr(f'lap_form_{kind}-202609221859.csv', 'lap,value\n1,2\n')
+            with self.assertRaises(runner.SyncError):
+                runner.extract_csv(zpath, dest)
+            self.assertEqual(legacy.read_text(), 'keep')
+            self.assertEqual(len(list(dest.iterdir())), 1)
 
 
 if __name__ == "__main__":

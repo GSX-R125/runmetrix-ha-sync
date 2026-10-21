@@ -1,14 +1,66 @@
-# Runmetrix Drive Sync
+# Runmetrix Drive Sync 0.2.5
 
-`/share/runmetrix` をGoogle Driveの `Runmetrix_Auto` に `rclone copy` で転送します。Drive上の余分なファイルは削除しません。同期に成功すると構成画面の `interval_hours`（1～24、初期値6）後に再実行し、失敗すると5分後に再試行します。
+HAの活動フォルダーを `Runmetrix_Auto/YYYY/MM/YYYYMMDD_HHMM/` に保存し、バックアップ照合後にHA側を最新件数へ整理します。
 
-## Google Drive接続の準備
+## 初回設定
 
-1. [rclone公式手順](https://rclone.org/drive/#making-your-own-client-id)でGoogle Drive APIを有効にし、ご自身のDesktop app型OAuth `client_id` と `client_secret` を作成します。rcloneの共通IDは2026年中に廃止予定です。
-2. Windowsでrcloneをインストールして `rclone config` を実行します。接続名は **`runmetrix_drive`**、ストレージは `drive`、権限は `drive.file` を選び、作成したIDとシークレットでブラウザー認証します。継続利用時はOAuth同意画面の公開状態にも注意してください。
-3. `rclone config file` で `rclone.conf` の場所を確認します。Home Assistantのアプリ情報画面に表示されるIDに合わせ、`\\homeassistant\addon_configs\<アプリID>\rclone.conf` へコピーします。`app_configs` と表示される環境では、その共有を使います。ローカルインストール時は `local_runmetrix_drive_sync`、GitHubリポジトリからの場合は接頭辞が変わります。
-4. アプリを起動し、ログに「Google Driveへのコピーが完了しました」と出ることを確認します。構成を変更したらアプリを再起動してください。
+1. [rclone公式のDrive設定手順](https://rclone.org/drive/)に従って、WindowsでGoogle Drive接続を作成します。接続名は **`runmetrix_drive`** とします。OAuthクライアントを自分で用意する場合は同ページの案内に従ってください。
+2. このアプリで既存の手動作成フォルダーを扱う場合は、`scope = drive` でブラウザー認証します。Drive全体を扱える権限なので、Googleの同意画面を確認してください。`drive.file` では、OAuthアプリが作成していない手動フォルダーを参照できないことがあります。
+3. Google Driveで保存先の `Runmetrix_Auto` フォルダーを作成または選択します。開いたURLが `https://drive.google.com/drive/u/0/folders/<ID>` なら、末尾の `<ID>` が保存先IDです。**このフォルダー自体が年月別保存のルートになります。**
+4. HAのアプリ情報画面にある実際のアプリIDを確認し、Windowsのrclone設定を次へコピーします。
+   `\\homeassistant\addon_configs\<DriveアプリID>\rclone.conf`
+5. 構成に保存先IDを入力して保存・起動します。
 
-`drive.file` 権限では、このOAuthアプリが作成していない既存フォルダにはアクセスできません。初回転送で作る `Runmetrix_Auto` フォルダを使ってください。既存フォルダへの保存には別途権限と保存先の調整が必要です。
+```yaml
+interval_hours: 6
+local_keep: 10
+clean_run: false
+root_folder_id: "保存先Runmetrix_AutoのフォルダーID"
+```
 
-`rclone.conf` にはトークンが含まれます。GitHub、Issue、Driveの共有フォルダに置かないでください。Driveへのコピーが成功しない場合は、認証情報を伏せたログのエラー文のみ共有してください。
+| 設定 | 初期値 | 動作 |
+| --- | --- | --- |
+| `interval_hours` | 6 | 1～24時間。処理終了から次回までの待機 |
+| `local_keep` | 10 | HAに通常保持する最新活動数。1以上 |
+| `clean_run` | false | trueなら履歴を無視し、全ローカル活動を再転送・同名置換 |
+| `root_folder_id` | 空欄 | 必須。自分のDrive保存先のID |
+
+空欄の保存先はエラーで停止します。個人用IDはソースコードに埋め込んでいません。rcloneに `--drive-root-folder-id` で渡すため、rclone設定内のルート指定よりこの項目を優先します。
+
+## 初回実行・更新後
+
+転送履歴がなければ、ローカルにある活動をすべて年月別に転送します。以前の個人用ローカル版にあった「既存活動を転送せず初期記録する」処理は公開版では使用しません。既存の転送履歴があれば通常処理で引き継ぎます。
+
+同じDrive内でも保存先IDを変えると履歴のルートと不一致になるため停止します。別の保存先に切り替える場合は両アプリを停止し、元の転送履歴を安全な場所へバックアップしてから設定領域外へ移し、新しい保存先に新規転送してください。HAから整理済みの過去活動は、残っているローカル活動だけでは再構築できません。
+
+旧版からの詳細は[移行手順](../MIGRATION.md)を参照してください。
+
+## `drive.file` から権限を変更する場合
+
+アプリを停止して `rclone.conf` をバックアップし、Windowsのrclone作業フォルダーにコピーします。対象remoteの `scope` を `drive` に変更して保存し、同じフォルダーで実行します。
+
+```powershell
+.\rclone.exe config reconnect runmetrix_drive: --config .\rclone.conf
+```
+
+同じGoogleアカウントで許可したら、更新済みの設定ファイルをHAへ戻して起動します。**scopeの文字列変更だけでは完了せず、再認証が必要です。** 個人のマイドライブでは共有ドライブ設定を選びません。
+
+## 再転送の検証
+
+HAに元活動が残っている状態で `clean_run: true` にして保存・再起動します。サイズ・更新日時が同じファイルも再転送します。Driveの同名ファイルは上書きしますが、別名ファイル・別活動は削除しません。
+
+ONの間は定期実行でも繰り返すため、検証後は `false` へ戻して保存・再起動してください。クリーン処理後も `local_keep` による照合・整理は有効です。
+
+## ログ・保持
+
+```text
+2026/10/21 10:00 同期処理実行開始
+保存完了: Runmetrix_Auto/2026/10/YYYYMMDD_HHMM
+HA保持: 10活動 / 今回削除: 2活動 / 通常保持: 最新10活動。未確認データは追加保持します。
+2026/10/21 10:01 同期処理終了（正常終了）
+次回実行予定 6時間後 / 2026/10/21 16:01（日本時間）
+```
+
+時刻・件数は表示例です。削除対象の活動ごとにDriveから実データを読み込み、SHA-256でローカル内容との一致を確認します。照合失敗時は「保持」と具体的な理由を表示し、終了状態も「照合保留 N活動」とします。通信等の処理エラーは「エラー終了」とし5分後に再試行します。照合保留は通常の設定間隔で再確認します。
+
+`yearmonth_upload_state.json` は各活動の転送先・状態・整理記録です。消すと初回扱いになるため、認証設定と一緒に保護してください。`manifest.json` は古いCSVを整理しても残し、RDMの再取得を防ぎます。

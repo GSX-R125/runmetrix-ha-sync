@@ -1,5 +1,5 @@
 name: "Runmetrix RDM Sync"
-version: "0.2.3"
+version: "0.3.6"
 slug: "runmetrix_sync"
 description: "ASICS Running Data Manager CSV export for Raspberry Pi 5"
 arch:
@@ -17,6 +17,8 @@ map:
 options:
   interval_hours: 6
   max_activities: 10
+  clean_run: false
 schema:
   interval_hours: int
   max_activities: int
+  clean_run: bool
